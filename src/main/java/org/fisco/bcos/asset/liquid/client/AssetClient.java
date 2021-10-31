@@ -1,4 +1,4 @@
-package org.fisco.bcos.asset.client;
+package org.fisco.bcos.asset.liquid.client;
 
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -6,7 +6,9 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Properties;
-import org.fisco.bcos.asset.contract.Asset;
+import java.util.Random;
+
+import org.fisco.bcos.asset.liquid.contract.Asset;
 import org.fisco.bcos.sdk.BcosSDK;
 import org.fisco.bcos.sdk.client.Client;
 import org.fisco.bcos.sdk.codec.datatypes.generated.tuples.generated.Tuple2;
@@ -18,7 +20,6 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
 public class AssetClient {
 
@@ -42,7 +43,8 @@ public class AssetClient {
   public void deployAssetAndRecordAddr() {
 
     try {
-      Asset asset = Asset.deploy(client, cryptoKeyPair);
+      String assetPath = "asset" + new Random().nextInt(1000);
+      Asset asset = Asset.deploy(client, cryptoKeyPair, assetPath);
       System.out.println(
           " deploy Asset success, contract address is " + asset.getContractAddress());
 
@@ -80,7 +82,7 @@ public class AssetClient {
     try {
       String contractAddress = loadAssetAddr();
       Asset asset = Asset.load(contractAddress, client, cryptoKeyPair);
-      Tuple2<BigInteger, BigInteger> result = asset.select(assetAccount);
+      Tuple2<BigInteger, BigInteger> result = asset.getSelectOutput(asset.select(assetAccount));
       if (result.getValue1().compareTo(new BigInteger("0")) == 0) {
         System.out.printf(" asset account %s, value %s \n", assetAccount, result.getValue2());
       } else {
@@ -103,12 +105,12 @@ public class AssetClient {
       TransactionReceipt receipt = asset.register(assetAccount, amount);
       List<Asset.RegisterEventEventResponse> response = asset.getRegisterEventEvents(receipt);
       if (!response.isEmpty()) {
-        if (response.get(0).ret.compareTo(new BigInteger("0")) == 0) {
-          System.out.printf(
-              " register asset account success => asset: %s, value: %s \n", assetAccount, amount);
+        if (response.get(0).ret_code.compareTo(BigInteger.valueOf(0)) == 0) {
+          System.out.println(
+                  " register asset account success => asset: " + assetAccount + ", value:  " + amount);
         } else {
-          System.out.printf(
-              " register asset account failed, ret code is %s \n", response.get(0).ret.toString());
+          System.out.println(
+                  " register asset account failed, ret code is " + response.get(0).ret_code.toString());
         }
       } else {
         System.out.println(" event log not found, maybe transaction not exec. ");
@@ -118,7 +120,7 @@ public class AssetClient {
       // e.printStackTrace();
 
       logger.error(" registerAssetAccount exception, error message is {}", e.getMessage());
-      System.out.printf(" register asset account failed, error message is %s\n", e.getMessage());
+      System.out.println(" register asset account failed, error message is " + e.getMessage());
     }
   }
 
@@ -129,13 +131,11 @@ public class AssetClient {
       TransactionReceipt receipt = asset.transfer(fromAssetAccount, toAssetAccount, amount);
       List<Asset.TransferEventEventResponse> response = asset.getTransferEventEvents(receipt);
       if (!response.isEmpty()) {
-        if (response.get(0).ret.compareTo(new BigInteger("0")) == 0) {
-          System.out.printf(
-              " transfer success => from_asset: %s, to_asset: %s, amount: %s \n",
-              fromAssetAccount, toAssetAccount, amount);
+        if (response.get(0).ret_code.compareTo(BigInteger.valueOf(0)) == 0) {
+          System.out.println(" transfer success => from_asset: " + fromAssetAccount + ", to_asset: " + toAssetAccount + ", amount: " + amount);
         } else {
-          System.out.printf(
-              " transfer asset account failed, ret code is %s \n", response.get(0).ret.toString());
+          System.out.println(
+                  " transfer asset account failed, ret code is " + response.get(0).ret_code.toString());
         }
       } else {
         System.out.println(" event log not found, maybe transaction not exec. ");
@@ -145,20 +145,20 @@ public class AssetClient {
       // e.printStackTrace();
 
       logger.error(" registerAssetAccount exception, error message is {}", e.getMessage());
-      System.out.printf(" register asset account failed, error message is %s\n", e.getMessage());
+      System.out.println(" register asset account failed, error message is " + e.getMessage());
     }
   }
 
   public static void Usage() {
     System.out.println(" Usage:");
     System.out.println(
-        "\t java -cp conf/:lib/*:apps/* org.fisco.bcos.asset.client.AssetClient deploy");
+        "\t java -cp conf/:lib/*:apps/* org.fisco.bcos.asset.liquid.client.AssetClient deploy");
     System.out.println(
-        "\t java -cp conf/:lib/*:apps/* org.fisco.bcos.asset.client.AssetClient query account");
+        "\t java -cp conf/:lib/*:apps/* org.fisco.bcos.asset.liquid.client.AssetClient query account");
     System.out.println(
-        "\t java -cp conf/:lib/*:apps/* org.fisco.bcos.asset.client.AssetClient register account value");
+        "\t java -cp conf/:lib/*:apps/* org.fisco.bcos.asset.liquid.client.AssetClient register account value");
     System.out.println(
-        "\t java -cp conf/:lib/*:apps/* org.fisco.bcos.asset.client.AssetClient transfer from_account to_account amount");
+        "\t java -cp conf/:lib/*:apps/* org.fisco.bcos.asset.liquid.client.AssetClient transfer from_account to_account amount");
     System.exit(0);
   }
 
