@@ -34,7 +34,7 @@ public class AssetClient {
     ApplicationContext context =
         new ClassPathXmlApplicationContext("classpath:applicationContext.xml");
     bcosSDK = context.getBean(BcosSDK.class);
-    client = bcosSDK.getClient("group");
+    client = bcosSDK.getClient();
     cryptoKeyPair = client.getCryptoSuite().getCryptoKeyPair();
     client.getCryptoSuite().setCryptoKeyPair(cryptoKeyPair);
     logger.debug("create client for group1, account address is " + cryptoKeyPair.getAddress());
