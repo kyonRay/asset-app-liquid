@@ -18,30 +18,8 @@ pub struct Entry {
     fileds: Vec<KVField>,
 }
 
-#[derive(InOut)]
-pub enum Comparator {
-    EQ(u8),
-    NE(u8),
-    GT(u8),
-    GE(u8),
-    LT(u8),
-    LE(u8),
-}
-
-#[derive(InOut)]
-pub struct CompareTriple {
-    lvalue: String,
-    rvalue: String,
-    cmp: Comparator,
-}
-
-#[derive(InOut)]
-pub struct Condition {
-    cond_fields: Vec<CompareTriple>,
-}
-
 #[liquid::interface(name = auto)]
-mod table {
+mod kv_table {
     use super::*;
 
     extern "liquid" {
@@ -51,22 +29,14 @@ mod table {
             key: String,
             value_fields: String,
         ) -> i256;
-        fn select(&self, table_name: String, condition: Condition) -> Vec<Entry>;
-        fn insert(&mut self, table_name: String, entry: Entry) -> i256;
-        fn update(
-            &mut self,
-            table_name: String,
-            entry: Entry,
-            condition: Condition,
-        ) -> i256;
-        fn remove(&mut self, table_name: String, condition: Condition) -> i256;
-        fn desc(&self, table_name: String) -> (String, String);
+        fn get(&self, table_name: String, key: String) -> (bool, Entry);
+        fn set(&mut self, table_name: String, key: String, entry: Entry) -> i256;
     }
 }
 
 #[liquid::contract]
 mod asset_test {
-    use super::{table::*, *};
+    use super::{kv_table::*, *};
 
     #[liquid(event)]
     struct RegisterEvent {
@@ -89,13 +59,14 @@ mod asset_test {
 
     #[liquid(storage)]
     struct AssetTableTest {
-        table: storage::Value<Table>,
+        table: storage::Value<KvTable>,
     }
 
     #[liquid(methods)]
     impl AssetTableTest {
         pub fn new(&mut self) {
-            self.table.initialize(Table::at("0x1001".parse().unwrap()));
+            self.table
+                .initialize(KvTable::at("/sys/kv_storage".parse().unwrap()));
             self.table.createTable(
                 String::from("t_asset").clone(),
                 String::from("account").clone(),
@@ -104,29 +75,17 @@ mod asset_test {
         }
 
         pub fn select(&mut self, account: String) -> (bool, u128) {
-            let cmp_triple = CompareTriple {
-                lvalue: String::from("account"),
-                rvalue: account,
-                cmp: Comparator::EQ(0),
-            };
-            let mut compare_fields = Vec::new();
-            compare_fields.push(cmp_triple);
-            let cond = Condition {
-                cond_fields: compare_fields,
-            };
-
-            let entries = self.table.select(String::from("t_asset"), cond).unwrap();
-
-            if entries.len() < 1 {
-                return (false, Default::default());
+            if let Some((result, entry)) =
+            (*self.table).get(String::from("t_asset"), account)
+            {
+                return (
+                    result,
+                    u128::from_str_radix(&entry.fileds[0].value.clone(), 10)
+                        .ok()
+                        .unwrap(),
+                );
             }
-
-            return (
-                true,
-                u128::from_str_radix(&entries[0].fileds[0].value.clone(), 10)
-                    .ok()
-                    .unwrap(),
-            );
+            return (false, Default::default());
         }
 
         pub fn register(&mut self, account: String, asset_value: u128) -> i256 {
@@ -145,7 +104,9 @@ mod asset_test {
                 kv_fields.push(kv0);
                 kv_fields.push(kv1);
                 let entry = Entry { fileds: kv_fields };
-                let result = self.table.insert(String::from("t_asset"), entry).unwrap();
+                let result = (*self.table)
+                    .set(String::from("t_asset"), account.clone(), entry)
+                    .unwrap();
 
                 if result == 1.into() {
                     ret_code = 0.into();
@@ -244,20 +205,8 @@ mod asset_test {
 
             let entry = Entry { fileds: kv_fields };
 
-            let cmp_triple = CompareTriple {
-                lvalue: String::from("account"),
-                rvalue: account,
-                cmp: Comparator::EQ(0),
-            };
-            let mut compare_fields = Vec::new();
-            compare_fields.push(cmp_triple);
-            let cond = Condition {
-                cond_fields: compare_fields,
-            };
-
-            let r = self
-                .table
-                .update(String::from("t_asset"), entry, cond)
+            let r = (*self.table)
+                .set(String::from("t_asset"), account, entry)
                 .unwrap();
             return r;
         }

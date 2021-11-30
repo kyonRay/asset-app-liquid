@@ -5,12 +5,14 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
 
 import org.fisco.bcos.asset.liquid.contract.Asset;
 import org.fisco.bcos.sdk.BcosSDK;
 import org.fisco.bcos.sdk.client.Client;
+import org.fisco.bcos.sdk.codec.datatypes.generated.tuples.generated.Tuple1;
 import org.fisco.bcos.sdk.codec.datatypes.generated.tuples.generated.Tuple2;
 import org.fisco.bcos.sdk.crypto.keypair.CryptoKeyPair;
 import org.fisco.bcos.sdk.model.TransactionReceipt;
@@ -43,7 +45,7 @@ public class AssetClient {
   public void deployAssetAndRecordAddr() {
 
     try {
-      String assetPath = "asset" + new Random().nextInt(1000);
+      String assetPath = "/asset" + new Random().nextInt(1000);
       Asset asset = Asset.deploy(client, cryptoKeyPair, assetPath);
       System.out.println(
           " deploy Asset success, contract address is " + asset.getContractAddress());
@@ -74,6 +76,9 @@ public class AssetClient {
     if (contractAddress == null || contractAddress.trim().equals("")) {
       throw new Exception(" load Asset contract address failed, please deploy it first. ");
     }
+    if (!contractAddress.startsWith("/")) {
+      contractAddress = "/" + contractAddress;
+    }
     logger.info(" load Asset address from contract.properties, address is {}", contractAddress);
     return contractAddress;
   }
@@ -103,17 +108,17 @@ public class AssetClient {
 
       Asset asset = Asset.load(contractAddress, client, cryptoKeyPair);
       TransactionReceipt receipt = asset.register(assetAccount, amount);
-      List<Asset.RegisterEventEventResponse> response = asset.getRegisterEventEvents(receipt);
-      if (!response.isEmpty()) {
-        if (response.get(0).ret_code.compareTo(BigInteger.valueOf(0)) == 0) {
-          System.out.println(
-                  " register asset account success => asset: " + assetAccount + ", value:  " + amount);
+      Tuple1<BigInteger> registerOutput = asset.getRegisterOutput(receipt);
+      if (receipt.getStatus() == 0) {
+        if (Objects.equals(registerOutput.getValue1(), BigInteger.valueOf(0))) {
+          System.out.printf(
+                  " register asset account success => asset: %s, value: %s \n", assetAccount, amount);
         } else {
-          System.out.println(
-                  " register asset account failed, ret code is " + response.get(0).ret_code.toString());
+          System.out.printf(
+                  " register asset account failed, ret code is %s \n", registerOutput.getValue1());
         }
       } else {
-        System.out.println(" event log not found, maybe transaction not exec. ");
+        System.out.println(" receipt status is error, maybe transaction not exec, status is: " + receipt.getStatus());
       }
     } catch (Exception e) {
       // TODO Auto-generated catch block
@@ -129,20 +134,20 @@ public class AssetClient {
       String contractAddress = loadAssetAddr();
       Asset asset = Asset.load(contractAddress, client, cryptoKeyPair);
       TransactionReceipt receipt = asset.transfer(fromAssetAccount, toAssetAccount, amount);
-      List<Asset.TransferEventEventResponse> response = asset.getTransferEventEvents(receipt);
-      if (!response.isEmpty()) {
-        if (response.get(0).ret_code.compareTo(BigInteger.valueOf(0)) == 0) {
-          System.out.println(" transfer success => from_asset: " + fromAssetAccount + ", to_asset: " + toAssetAccount + ", amount: " + amount);
+      Tuple1<BigInteger> transferOutput = asset.getTransferOutput(receipt);
+      if (receipt.getStatus() == 0) {
+        if (Objects.equals(transferOutput.getValue1(), BigInteger.valueOf(0))) {
+          System.out.printf(
+                  " transfer success => from_asset: %s, to_asset: %s, amount: %s \n",
+                  fromAssetAccount, toAssetAccount, amount);
         } else {
-          System.out.println(
-                  " transfer asset account failed, ret code is " + response.get(0).ret_code.toString());
+          System.out.printf(
+                  " transfer asset account failed, ret code is %s \n", transferOutput.getValue1());
         }
       } else {
-        System.out.println(" event log not found, maybe transaction not exec. ");
+        System.out.println(" receipt status is error, maybe transaction not exec. status is: " + receipt.getStatus());
       }
     } catch (Exception e) {
-      // TODO Auto-generated catch block
-      // e.printStackTrace();
 
       logger.error(" registerAssetAccount exception, error message is {}", e.getMessage());
       System.out.println(" register asset account failed, error message is " + e.getMessage());
@@ -169,33 +174,37 @@ public class AssetClient {
 
     AssetClient client = new AssetClient();
     client.initialize();
+    try {
 
-    switch (args[0]) {
-      case "deploy":
-        client.deployAssetAndRecordAddr();
-        break;
-      case "query":
-        if (args.length < 2) {
+      switch (args[0]) {
+        case "deploy":
+          client.deployAssetAndRecordAddr();
+          break;
+        case "query":
+          if (args.length < 2) {
+            Usage();
+          }
+          client.queryAssetAmount(args[1]);
+          break;
+        case "register":
+          if (args.length < 3) {
+            Usage();
+          }
+          client.registerAssetAccount(args[1], new BigInteger(args[2]));
+          break;
+        case "transfer":
+          if (args.length < 4) {
+            Usage();
+          }
+          client.transferAsset(args[1], args[2], new BigInteger(args[3]));
+          break;
+        default: {
           Usage();
         }
-        client.queryAssetAmount(args[1]);
-        break;
-      case "register":
-        if (args.length < 3) {
-          Usage();
-        }
-        client.registerAssetAccount(args[1], new BigInteger(args[2]));
-        break;
-      case "transfer":
-        if (args.length < 4) {
-          Usage();
-        }
-        client.transferAsset(args[1], args[2], new BigInteger(args[3]));
-        break;
-      default:
-        {
-          Usage();
-        }
+      }
+    }
+    catch (Exception e){
+      System.out.println("Error: " + e);
     }
     System.exit(0);
   }
